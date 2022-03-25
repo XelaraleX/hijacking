@@ -3,13 +3,15 @@ import sys
 sys.path.append("../")
 from models.yolov3_wrapper import YOLOv3
 from pipeline_center import pipeline
-from utils.utils import letterbox_image, box_iou
+from utils.utils import letterbox_image, box_iou, draw_box_label
 from PIL import Image
 
 import cv2
 import glob
 import numpy as np
 from keras import backend as K
+#import skvideo
+#skvideo.setFFmpegPath("/venv/lib/python3.7/site-packages/ffmpeg/")
 import skvideo.io
 import copy
 import math
@@ -255,6 +257,10 @@ def attack_video(params, video_path=None, attack_det_id_dict=None, patch_bbox=No
 
                 print("Fabricate bbox location {} at frame {}".format(attack_bbox, frame_count))
                 image_yolo_pil.save('./output/' + 'ori_' + str(frame_count) + '.png')
+                #image, detected_objects_list[target_det_id]['bbox']
+                #image_yolo_pil.save('./output/' + 'ori_bbox_' + str(frame_count) + '.png')
+                #print("!!!!!", target_det_id)
+                #image_with_bbox = draw_box_label(img=image_yolo_pil, detected_object=temp_attack_obj['bbox'])
                 attack_count_idx += 1
 
         image_track, params, match_info = pipeline(image, detected_objects_list, frame_count, params, detect_output=True, verbose=verbose, virtual_attack=virtual_attack, return_match_info=True, is_init=is_init)
