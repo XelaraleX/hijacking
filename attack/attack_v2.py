@@ -1,5 +1,7 @@
 '''apply only one fabrication attack'''
 import sys
+
+from utils.image_utils import load_yolov3_image
 sys.path.append("../")
 from models.yolov3_wrapper import YOLOv3
 from pipeline_center import pipeline
@@ -172,7 +174,7 @@ def attack_video(params, video_path=None, attack_det_id_dict=None, patch_bbox=No
     for frame_count, image in enumerate(videogen.nextFrame()): 
         if frame_count > 1:
             is_init = False
-
+        image = np.array(Image.open(f'./output/adv_1000.png'))
         image_yolo, _ = letterbox_image(image, shape=(416, 416), data_format='channels_last')
         image = bgr2rgb((image_yolo * 255).astype(np.uint8))
         image_yolo_pil = Image.fromarray((image_yolo * 255).astype(np.uint8))
@@ -256,15 +258,22 @@ def attack_video(params, video_path=None, attack_det_id_dict=None, patch_bbox=No
                     del detected_objects_list[target_det_id]
 
                 print("Fabricate bbox location {} at frame {}".format(attack_bbox, frame_count))
-                image_yolo_pil.save('./output/' + 'ori_' + str(frame_count) + '.png')
-                #image, detected_objects_list[target_det_id]['bbox']
-                #image_yolo_pil.save('./output/' + 'ori_bbox_' + str(frame_count) + '.png')
-                #print("!!!!!", target_det_id)
-                #image_with_bbox = draw_box_label(img=image_yolo_pil, detected_object=temp_attack_obj['bbox'])
+                left, top, right, bottom = int(attack_bbox[0]), int(attack_bbox[1]), int(attack_bbox[2]), int(attack_bbox[3])
+                image_bbox = cv2.rectangle(image.copy(), (left, top), (right, bottom), (0, 0, 255), 1) # pos R
+                #attack_bbox = [188, 284, 247, 309]
+                attack_bbox = [139.35362243652344, 256.6859130859375, 264.1953125, 332.96710205078125]
+                left, top, right, bottom = int(attack_bbox[0]), int(attack_bbox[1]), int(attack_bbox[2]), int(attack_bbox[3])
+                image_bbox = cv2.rectangle(image_bbox, (left, top), (right, bottom), (255, 0, 0), 1) #patch B
+                attack_bbox = target_init_bbox
+                print(target_init_bbox)
+                left, top, right, bottom = int(attack_bbox[0]), int(attack_bbox[1]), int(attack_bbox[2]), int(attack_bbox[3])
+                image_bbox = cv2.rectangle(image_bbox, (left, top), (right, bottom), (0, 255, 0), 1) #original G
+                #cv2.imwrite('./output/' + str(frame_count) + '.png', image_bbox)
+                cv2.imwrite('./output/' + str(frame_count) + 'p' + '.png', image_bbox)
+                # image_yolo_pil.save('./output/' + 'ori_' + str(frame_count) + '.png')
                 attack_count_idx += 1
 
         image_track, params, match_info = pipeline(image, detected_objects_list, frame_count, params, detect_output=True, verbose=verbose, virtual_attack=virtual_attack, return_match_info=True, is_init=is_init)
-
         cv2.imwrite('./output/track/' + str(frame_count) + '.png', image_track)
 
         match_info_prev = copy.deepcopy(match_info)
@@ -284,6 +293,3 @@ def cal_success_rate(input_list):
                 count += 1
         results.append(float(count) / float(total_num))
     return results
-
-
-
