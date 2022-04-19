@@ -12,24 +12,20 @@ image_shape = [416, 416]
 target_class = 2
 bbox_loc = [106, 248, 231, 325] # left, top, right, bottom
 patch_coords = [188, 284, 247, 309]
-patch_mask = np.zeros(np.array([416, 416]), np.float32)
+patch_mask = np.zeros(np.array(image_shape), np.float32)
 patch_mask[patch_coords[1] : patch_coords[3], patch_coords[0] : patch_coords[2]] = 1.
 patch_mask = np.concatenate([[patch_mask]] * 3, axis=0)
 patch_mask = np.moveaxis(patch_mask, 0, -1)
 patch_mask = np.expand_dims(patch_mask, axis=0)
-print(patch_mask)
 patch_unmask = 1. - patch_mask
-print(patch_mask.sum())
 lambda_ = 1
-cx, cy = (bbox_loc[2] + bbox_loc[0]) // 2, (bbox_loc[3] + bbox_loc[1]) // 2
+cx, cy = (bbox_loc[2] + bbox_loc[0]) / 2, (bbox_loc[3] + bbox_loc[1]) / 2
 
 sess = K.get_session()
 model = YOLOv3(sess=sess)
 num_layers = len(model.model.output)
-image = load_yolov3_image('output/ori_3.png')
+image = load_yolov3_image('output/orig_3.png')
 patch = patch_mask * image
-print(patch.sum())
-cv2.imwrite(f'./output/patch/patch_{0}.png', patch[0])
 input_shape = K.shape(model.model.output[0])[1:3] * 32
 anchor_mask = [[6, 7, 8], [3, 4, 5], [0, 1, 2]]
 
@@ -79,7 +75,7 @@ for l in range(num_layers):
     box_class_probs_logits_t[l][np.where(bbox_contains_mask[l] == 1), target_class] = 1
 
 if save_img_with_bboxes:
-    image_bbox = cv2.circle(image_bbox, (cx, cy), radius=5, color=(0, 255, 0), thickness=-1)
+    image_bbox = cv2.circle(image_bbox, (int(cx), int(cy)), radius=5, color=(0, 255, 0), thickness=-1)
     cv2.imwrite('./output/' + 'filtered_bboxes' + '.png', image_bbox)
 
 bbox_contains_mask_ = {}
@@ -89,7 +85,6 @@ for l, size in enumerate([507, 2028, 8112]):
     bbox_contains_mask_[l] =  tf.placeholder(tf.float32, shape=[size], name=f'contains_mask_{l}')
     box_class_probs_logits_[l] = tf.placeholder(tf.float32, shape=[size, 80], name=f'box_class_probs_logits_{l}')
 bbox_loc_ = tf.placeholder(tf.float32, shape=[4], name='bbox_loc')
-#patch_mask_ =  tf.placeholder(bool, shape=patch_mask.shape, name=f'patch_mask')
 
 cx_, cy_ = (bbox_loc_[2] + bbox_loc_[0]) // 2, (bbox_loc_[3] + bbox_loc_[1]) // 2
 w_ = tf.sqrt(bbox_loc_[2] - bbox_loc_[0])
@@ -115,15 +110,13 @@ for l in range(num_layers):
     mbox_confidence_logits = tf.reshape(mbox_confidence_logits, [-1, 1])
     mbox_class_probs_logits = tf.reshape(mbox_class_probs_logits, [-1, 80])
 
-    # mbox_class_probs_logits = tf.nn.softmax(mbox_class_probs_logits)
-    # cross_entropy = -tf.reduce_sum(box_class_probs_logits_[l] * tf.math.log(mbox_class_probs_logits), axis=[1])
     cross_entropy = tf.nn.softmax_cross_entropy_with_logits(logits=mbox_class_probs_logits, labels=box_class_probs_logits_[l])
     loss_1 = tf.reduce_sum((mbox_confidence_logits ** 2 - cross_entropy) * bbox_contains_mask_[l], name=f'loss_1_{l}')
 
     boxes = yolo_correct_boxes(mbox_xy, mbox_wh, input_shape, image_shape)
     boxes = tf.reshape(boxes, [-1, 4])
-    cx = (boxes[:, 0] + boxes[:, 2]) // 2
-    cy = (boxes[:, 1] + boxes[:, 3]) // 2
+    cx = (boxes[:, 0] + boxes[:, 2]) / 2
+    cy = (boxes[:, 1] + boxes[:, 3]) / 2
     w = tf.sqrt(boxes[:, 2] - boxes[:, 0])
     h = tf.sqrt(boxes[:, 3] - boxes[:, 1])
 
@@ -137,11 +130,7 @@ for l in range(num_layers):
 grad = tf.gradients(loss, [model.patch])
 print(grad)
 print(model.patch)
-patch_ = model.patch - 0.001 * tf.sign(grad)[0] * patch_mask
-    #patch = optimizer.minimize(loss, var_list=[model.patch])
-    #grad = tf.gradients(loss, model.input_image)
-    #patch_ = optimizer.minimize(loss, var_list=[model.patch])
-print(patch_)
+patch_ = model.patch - tf.sign(grad[0]) * patch_mask
 adv_x = patch_unmask * model.input_image + patch_
 
 print(patch.sum())
@@ -163,8 +152,8 @@ for it in range(50001):
         })
     print(patch.sum())
     print(f'{it}: {cur_loss}')
-    image = adv#[0]#[0]
-    adv = (image * 255)[0][:, :, [2, 1, 0]]
+    image = adv
+    adv = (adv * 255)[0][:, :, [2, 1, 0]]
 
     if it and cur_loss >= best_loss:
         patience -= 1
@@ -173,10 +162,10 @@ for it in range(50001):
             break
     else:
         patience = 5
-    #cv2.imwrite(f'./output/patch/patch_{it}.png', patch[0])
+
     best_loss = cur_loss
 
-    if it % 1000 == 0:
+    if it % 300 == 0:
         cv2.imwrite(f'./output/adv_{it}.png', adv)
 
 cv2.imwrite(f'./output/adv_{it}.png', adv)
