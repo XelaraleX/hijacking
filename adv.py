@@ -11,6 +11,7 @@ save_img_with_bboxes = False
 image_shape = [416, 416]
 target_class = 2
 bbox_loc = [106, 248, 231, 325] # left, top, right, bottom
+orig_bbox_loc = [139.35362243652344, 256.6859130859375, 264.1953125, 332.96710205078125]
 patch_coords = [188, 284, 247, 309]
 patch_mask = np.zeros(np.array(image_shape), np.float32)
 patch_mask[patch_coords[1] : patch_coords[3], patch_coords[0] : patch_coords[2]] = 1.
@@ -19,12 +20,12 @@ patch_mask = np.moveaxis(patch_mask, 0, -1)
 patch_mask = np.expand_dims(patch_mask, axis=0)
 patch_unmask = 1. - patch_mask
 lambda_ = 1
-cx, cy = (bbox_loc[2] + bbox_loc[0]) / 2, (bbox_loc[3] + bbox_loc[1]) / 2
+cx, cy = (orig_bbox_loc[2] + orig_bbox_loc[0]) / 2, (orig_bbox_loc[3] + orig_bbox_loc[1]) / 2
 
 sess = K.get_session()
 model = YOLOv3(sess=sess)
 num_layers = len(model.model.output)
-image = load_yolov3_image('output/orig_3.png')
+image = load_yolov3_image('output/original_3.png')
 patch = patch_mask * image
 input_shape = K.shape(model.model.output[0])[1:3] * 32
 anchor_mask = [[6, 7, 8], [3, 4, 5], [0, 1, 2]]
@@ -91,7 +92,8 @@ w_ = tf.sqrt(bbox_loc_[2] - bbox_loc_[0])
 h_ = tf.sqrt(bbox_loc_[3] - bbox_loc_[1])
 
 loss = 0
-optimizer = tf.compat.v1.train.AdamOptimizer()
+c_loss = 0
+optimizer = tf.compat.v1.train.AdamOptimizer(learning_rate=0.001)
 
 for l in range(num_layers):
     print(model.input_image)
@@ -120,23 +122,23 @@ for l in range(num_layers):
     w = tf.sqrt(boxes[:, 2] - boxes[:, 0])
     h = tf.sqrt(boxes[:, 3] - boxes[:, 1])
 
-    centre_loss = (tf.math.subtract(cx, cx_) ** 2 + tf.math.subtract(cy, cy_) ** 2)
+    centre_loss = (tf.math.subtract(cx, cx_) ** 2 + tf.math.subtract(cy, cy_) ** 2) * 0.001
     size_loss = tf.math.subtract(w, w_) ** 2 + tf.math.subtract(h, h_) ** 2
     loss_2 = tf.reduce_sum(((1 - mbox_confidence_logits) ** 2 + centre_loss + size_loss +\
         cross_entropy) * bbox_contains_mask_[l], name=f'loss_2_{l}')
 
-    loss += loss_1 + lambda_ * loss_2
+    loss += loss_2
+    c_loss += tf.reduce_sum(centre_loss * bbox_contains_mask_[l], name=f'loss_2_{l}')
 
-grad = tf.gradients(loss, [model.patch])
-print(grad)
-print(model.patch)
-patch_ = model.patch - tf.sign(grad[0]) * patch_mask
+#grad = tf.gradients(loss, [model.patch])
+grad = optimizer.compute_gradients(loss, var_list=[model.patch])
+patch_ = model.patch - 0.01 * tf.sign(grad[0][0]) * patch_mask
 adv_x = patch_unmask * model.input_image + patch_
 
 print(patch.sum())
 patience = 5
 for it in range(50001):
-    cur_loss, patch, adv, gradient = sess.run([loss, patch_, adv_x, grad], feed_dict={
+    cur_loss, patch, adv, centr_loss = sess.run([loss, patch_, adv_x, c_loss], feed_dict={
             model.input_image_: image,
             model.input_image_shape: [416, 416],
             bbox_loc_: bbox_loc,
@@ -150,7 +152,7 @@ for it in range(50001):
             bbox_contains_mask_[2]: bbox_contains_mask[2],
             K.learning_phase(): 0,
         })
-    print(patch.sum())
+    print(f'centre loss: {centr_loss}')
     print(f'{it}: {cur_loss}')
     image = adv
     adv = (adv * 255)[0][:, :, [2, 1, 0]]
@@ -165,7 +167,7 @@ for it in range(50001):
 
     best_loss = cur_loss
 
-    if it % 300 == 0:
+    if it % 50 == 0:
         cv2.imwrite(f'./output/adv_{it}.png', adv)
 
 cv2.imwrite(f'./output/adv_{it}.png', adv)
