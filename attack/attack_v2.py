@@ -174,7 +174,7 @@ def attack_video(params, video_path=None, attack_det_id_dict=None, patch_bbox=No
     for frame_count, image in enumerate(videogen.nextFrame()): 
         if frame_count > 1:
             is_init = False
-        image = np.array(Image.open(f'./output/adv_1000.png'))
+        image = np.array(Image.open(f'./output/adv_300.png'))
         image_yolo, _ = letterbox_image(image, shape=(416, 416), data_format='channels_last')
         image = bgr2rgb((image_yolo * 255).astype(np.uint8))
         image_yolo_pil = Image.fromarray((image_yolo * 255).astype(np.uint8))
@@ -258,6 +258,7 @@ def attack_video(params, video_path=None, attack_det_id_dict=None, patch_bbox=No
                     del detected_objects_list[target_det_id]
 
                 print("Fabricate bbox location {} at frame {}".format(attack_bbox, frame_count))
+                #image_yolo_pil.save('./output/' + 'ori_' + str(frame_count) + '.png')
                 left, top, right, bottom = int(attack_bbox[0]), int(attack_bbox[1]), int(attack_bbox[2]), int(attack_bbox[3])
                 image_bbox = cv2.rectangle(image.copy(), (left, top), (right, bottom), (0, 0, 255), 1) # pos R
                 #attack_bbox = [188, 284, 247, 309]
