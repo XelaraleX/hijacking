@@ -70,8 +70,10 @@ class YOLOv3(object):
                                 iou_threshold=self.nms_iou_threshold)
 
     def create_model(self):
-
-        self.input_image = tf.placeholder(tf.float32, (None, None, None, 3))
+        self.patch = tf.placeholder(tf.float32, shape=(None, None, None, 3), name='patch')
+        self.patch_mask = tf.placeholder(tf.float32, shape=(None, None, None, 3), name='patch_mask')
+        self.input_image_ = tf.placeholder(tf.float32, (None, None, None, 3))
+        self.input_image = self.patch_mask * self.input_image_ + self.patch * (1 - self.patch_mask)
         boxed_image = letterbox_image_tf_dynamic(self.input_image, (416, 416))
         input = Input(tensor=boxed_image)
         model = yolo_body(input, len(self.anchors)//3, len(self.class_names))
